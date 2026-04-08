@@ -1,11 +1,7 @@
 <template>
   <div
     class="min-h-dvh text-white"
-    :class="
-      obsMode
-        ? 'flex flex-col items-center justify-center bg-[#00FF00] p-2'
-        : 'bg-night px-4 py-6'
-    "
+    :class="obsMode ? 'flex flex-col items-center justify-center p-2' : 'bg-night px-4 py-6'"
   >
     <div v-if="!obsMode" class="mx-auto mb-10 mt-2 flex max-w-7xl flex-col gap-4 md:flex-row">
       <img
@@ -69,10 +65,6 @@
           />
           <span>3D</span>
         </label>
-        <label class="flex cursor-pointer items-center gap-2.5 text-sm text-white">
-          <input v-model="chromaEnabled" type="checkbox" class="input-check" />
-          <span>Chroma</span>
-        </label>
         <button
           type="button"
           class="ml-auto inline-flex items-center gap-2 rounded-lg border border-white/20 bg-eerie-black px-3 py-2 text-sm font-semibold text-white hover:border-moonstone/50 hover:bg-white/5"
@@ -100,12 +92,12 @@
               ? ''
               : [
                   'shadow-lg',
-                  canvasIsGreen
+                  canvasIsTransparent
                     ? 'rounded-lg border-[3px] border-black/50 ring-1 ring-black/30'
                     : 'rounded-lg border-[3px] border-moonstone/45 ring-1 ring-white/10',
                 ]
           "
-          :style="{ backgroundColor: canvasIsGreen ? '#00FF00' : '#1C1E1E' }"
+          :style="{ backgroundColor: canvasIsTransparent ? 'transparent' : '#1C1E1E' }"
         >
           <div
             ref="flickWrap"
@@ -165,10 +157,6 @@
               <span class="share-option-label">OBS</span>
             </label>
             <label class="share-option share-option--compact">
-              <input v-model="shareIncludeChroma" type="checkbox" class="input-check" />
-              <span class="share-option-label">CHROMA</span>
-            </label>
-            <label class="share-option share-option--compact">
               <input v-model="shareIncludeBirdView" type="checkbox" class="input-check" />
               <span class="share-option-label">3D</span>
             </label>
@@ -213,12 +201,10 @@ const obsMode = computed(() => {
   return o === '1' || o === 'true' || o === 'yes'
 })
 
-const chromaEnabled = ref(false)
 /** `top` = Draufsicht; `bird` = Vogelperspektive von vorn (symmetrisch, Münze flach). */
 const viewMode = ref<'top' | 'bird'>('top')
 const shareOpen = ref(false)
 const shareIncludeObs = ref(true)
-const shareIncludeChroma = ref(true)
 const shareIncludeBirdView = ref(false)
 const shareIncludeAutostart = ref(true)
 const shareCopied = ref(false)
@@ -232,19 +218,49 @@ const flickWrap = ref<HTMLElement | null>(null)
 const canvasEl = ref<HTMLCanvasElement | null>(null)
 const stageOuter = ref<HTMLElement | null>(null)
 
-/** Grüner Canvas + OBS-Vollbild: immer wenn OBS oder Chroma-Vorschau aktiv. */
-const canvasIsGreen = computed(() => obsMode.value || chromaEnabled.value)
-
 function truthyQuery(v: unknown): boolean {
   return v === '1' || v === 'true' || v === 'yes' || v === 'on'
 }
 
+/**
+ * Transparenter Seitenhintergrund (OBS Alpha). Bei obs=1 immer an.
+ * Optional: ?transparent=1 | ?alpha=1 ohne OBS; ?chroma=1 bleibt als Legacy-Link kompatibel.
+ */
+const canvasIsTransparent = computed(() => {
+  if (obsMode.value) return true
+  const q = route.query
+  return truthyQuery(q.transparent) || truthyQuery(q.alpha) || truthyQuery(q.chroma)
+})
+
+useHead(() => ({
+  htmlAttrs: {
+    class: canvasIsTransparent.value ? 'obs-transparent-active' : undefined,
+  },
+}))
+
+function applyTransparentToDocument(on: boolean) {
+  if (!import.meta.client) return
+  const html = document.documentElement
+  const body = document.body
+  const nuxt = document.getElementById('__nuxt')
+  const app = document.getElementById('app')
+  if (on) {
+    html.classList.add('obs-transparent-active')
+    html.style.setProperty('background', 'transparent', 'important')
+    body.style.setProperty('background', 'transparent', 'important')
+    nuxt?.style.setProperty('background', 'transparent', 'important')
+    app?.style.setProperty('background', 'transparent', 'important')
+  } else {
+    html.classList.remove('obs-transparent-active')
+    html.style.removeProperty('background')
+    body.style.removeProperty('background')
+    nuxt?.style.removeProperty('background')
+    app?.style.removeProperty('background')
+  }
+}
+
 function applyQueryFromRoute() {
   const q = route.query
-
-  const c = q.chroma
-  if (c === '0' || c === 'false' || c === 'no' || c === 'off') chromaEnabled.value = false
-  else if (truthyQuery(c)) chromaEnabled.value = true
 
   const v = q.view
   if (typeof v === 'string') {
@@ -266,7 +282,6 @@ watch(
 
 function buildShareUrl(
   includeObs: boolean,
-  includeChroma: boolean,
   includeBirdView: boolean,
   includeAutostart: boolean,
 ): string {
@@ -274,7 +289,6 @@ function buildShareUrl(
   const u = new URL(window.location.href)
   u.search = ''
   if (includeObs) u.searchParams.set('obs', '1')
-  if (includeChroma) u.searchParams.set('chroma', '1')
   if (includeBirdView) u.searchParams.set('view', 'bird')
   if (includeAutostart) u.searchParams.set('autostart', '1')
   return u.toString()
@@ -288,7 +302,6 @@ function selectShareInput(ev: Event) {
 const shareUrlDisplay = computed(() =>
   buildShareUrl(
     shareIncludeObs.value,
-    shareIncludeChroma.value,
     shareIncludeBirdView.value,
     shareIncludeAutostart.value,
   ),
@@ -297,7 +310,6 @@ const shareUrlDisplay = computed(() =>
 async function copyShareLink() {
   const url = buildShareUrl(
     shareIncludeObs.value,
-    shareIncludeChroma.value,
     shareIncludeBirdView.value,
     shareIncludeAutostart.value,
   )
@@ -315,7 +327,6 @@ async function copyShareLink() {
 
 watch(shareOpen, (open) => {
   if (open) {
-    shareIncludeChroma.value = chromaEnabled.value
     shareIncludeBirdView.value = viewMode.value === 'bird'
     shareIncludeAutostart.value = true
   }
@@ -575,7 +586,8 @@ function initThree() {
       THREE = mod
       faceTextures = { heads: texHeads, tails: texTails }
 
-      const bg = canvasIsGreen.value ? 0x00ff00 : 0x1c1e1e
+      const bg = canvasIsTransparent.value ? 0x000000 : 0x1c1e1e
+      const alpha = canvasIsTransparent.value ? 0 : 1
       scene = new THREE.Scene()
       camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 100)
       applyCameraPose()
@@ -583,9 +595,9 @@ function initThree() {
       renderer = new THREE.WebGLRenderer({
         canvas: canvasEl.value!,
         antialias: true,
-        alpha: false,
+        alpha: true,
       })
-      renderer.setClearColor(bg, 1)
+      renderer.setClearColor(bg, alpha)
       syncRendererSize()
 
       const amb = new THREE.AmbientLight(0xffffff, 0.52)
@@ -617,11 +629,13 @@ function initThree() {
 
 function syncRendererClearColor() {
   if (!renderer || !THREE) return
-  const bg = canvasIsGreen.value ? 0x00ff00 : 0x1c1e1e
-  renderer.setClearColor(bg, 1)
+  const bg = canvasIsTransparent.value ? 0x000000 : 0x1c1e1e
+  const alpha = canvasIsTransparent.value ? 0 : 1
+  renderer.setClearColor(bg, alpha)
 }
 
-watch(canvasIsGreen, () => {
+watch(canvasIsTransparent, () => {
+  applyTransparentToDocument(canvasIsTransparent.value)
   syncRendererClearColor()
 })
 
@@ -723,7 +737,10 @@ onMounted(() => {
   }
   window.addEventListener('pointerdown', audioBump, { capture: true, passive: true })
 
-  nextTick(() => initThree())
+  nextTick(() => {
+    applyTransparentToDocument(canvasIsTransparent.value)
+    initThree()
+  })
 })
 
 onUnmounted(() => {
@@ -734,6 +751,7 @@ onUnmounted(() => {
   clearTimeout(autostartTimeoutId)
   clearTimeout(shareCopyResetId)
   disposeThree()
+  applyTransparentToDocument(false)
   void audioCtx?.close()
   audioCtx = null
 })

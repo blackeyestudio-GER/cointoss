@@ -5,3 +5,20 @@
 body {
   @apply min-h-dvh bg-night text-dim-gray antialiased;
 }
+
+html.obs-transparent-active,
+html.obs-transparent-active body,
+html.obs-transparent-active #__nuxt,
+html.obs-transparent-active #app {
+  background-color: transparent !important;
+}
+
+html.obs-transparent-active,
+html.obs-transparent-active body {
+  min-height: 100%;
+}
+
+html.obs-transparent-active #__nuxt,
+html.obs-transparent-active #app {
+  min-height: 100vh;
+}
